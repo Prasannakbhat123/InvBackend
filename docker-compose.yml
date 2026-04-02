@@ -1,0 +1,62 @@
+# Production / VM deploy: backend only — set DATABASE_URL (e.g. Neon) and SECRET_KEY in .env
+# Local Postgres: docker compose --profile localdb up -d
+services:
+  backend:
+    build: .
+    container_name: erp-backend
+    restart: always
+    ports:
+      - "8060:8000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required in .env}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+    networks:
+      - webnet
+      - default
+
+  db:
+    profiles:
+      - localdb
+    image: postgres:15-alpine
+    container_name: erp-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-erp_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-erp_password}
+      POSTGRES_DB: ${POSTGRES_DB:-erp_db}
+    networks:
+      - webnet
+    volumes:
+      - erp_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-erp_user} -d $${POSTGRES_DB:-erp_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    profiles:
+      - localdb
+    image: dpage/pgadmin4
+    container_name: erp-pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@windscapesai.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin_password}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    networks:
+      - webnet
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  erp_db_data:
+
+networks:
+  default:
+    driver: bridge
+  webnet:
+    external: true
